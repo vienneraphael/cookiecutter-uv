@@ -39,6 +39,8 @@ if __name__ == "__main__":
         remove_dir(".devcontainer")
     if "{{cookiecutter.render}}}" != "y":
         remove_file("render.yaml")
+    if "{{cookiecutter.makefile}}}" != "y":
+        remove_file("Makefile")
 
     if "{{cookiecutter.layout}}" == "src":
         if os.path.isdir("src"):

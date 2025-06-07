@@ -28,5 +28,9 @@
   "devcontainer": [
     "n",
     "y"
+  ],
+  "makefile": [
+    "n",
+    "y"
   ]
 }
