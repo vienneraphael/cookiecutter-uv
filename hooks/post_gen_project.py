@@ -59,6 +59,7 @@ if __name__ == "__main__":
             print("git executable not found in PATH, passing GitHub repository creation.")
         else:
             subprocess.run([git_executable, "-C", PROJECT_DIRECTORY, "init"], check=True)
+            subprocess.run([git_executable, "-C", PROJECT_DIRECTORY, "add", "."], check=True)
             precommit_executable = shutil.which("pre-commit")
             if precommit_executable is None:
                 print("pre-commit executable not found in PATH, can't install pre-commit hooks.")
