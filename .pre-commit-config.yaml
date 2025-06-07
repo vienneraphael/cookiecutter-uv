@@ -4,7 +4,6 @@ repos:
     hooks:
       - id: check-case-conflict
       - id: check-merge-conflict
-      - id: end-of-file-fixer
       - id: trailing-whitespace
       - id: check-json
         exclude: ^({{cookiecutter.project_name}}/\.devcontainer/devcontainer\.json|\.devcontainer/devcontainer\.json|{{cookiecutter.project_name}}/)$
