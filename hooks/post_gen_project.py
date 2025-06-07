@@ -33,9 +33,6 @@ if __name__ == "__main__":
 
     if "{{cookiecutter.codecov}}" != "y":
         remove_file("codecov.yaml")
-        if "{{cookiecutter.include_github_actions}}" == "y":
-            remove_file(".github/workflows/validate-codecov-config.yml")
-
     if "{{cookiecutter.devcontainer}}" != "y":
         remove_dir(".devcontainer")
     if "{{cookiecutter.render}}}" != "y":
@@ -47,6 +44,8 @@ if __name__ == "__main__":
         if os.path.isdir("src"):
             remove_dir("src")
         move_dir("{{cookiecutter.project_slug}}", os.path.join("src", "{{cookiecutter.project_slug}}"))
+    elif "{{cookiecutter.layout}}" == "backend":
+        move_dir("{{cookiecutter.project_slug}}", "backend")
     uv_executable = shutil.which("uv")
     if uv_executable is None:
         print("uv executable not found in PATH, can't generate lockfile.")
@@ -71,11 +70,14 @@ if __name__ == "__main__":
             if gh_executable is None:
                 print("gh executable not found in PATH, please install GitHub CLI to create a repository.")
             else:
-                if not subprocess.run(
-                    [gh_executable, "auth", "status", "--show-token"],
-                    check=True,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
+                if (
+                    subprocess.run(
+                        [gh_executable, "auth", "status"],
+                        check=False,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    ).returncode
+                    == 1
                 ):
                     print("You are not authenticated with GitHub CLI. Starting authentification...")
                     subprocess.run([gh_executable, "auth", "login"], check=True)
