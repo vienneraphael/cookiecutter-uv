@@ -19,7 +19,5 @@ dev = [
 requires = ["setuptools", "setuptools-scm"]
 build-backend = "setuptools.build_meta"
 
-{% if cookiecutter.layout != 'flat' %}
 [tool.setuptools]
-packages = ["{{cookiecutter.layout}}"]
-{% endif %}
+packages = [{% if cookiecutter.layout != 'flat' %}"{{cookiecutter.layout}}"{% endif %}]
