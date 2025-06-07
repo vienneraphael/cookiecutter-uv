@@ -1,0 +1,50 @@
+# This file uses the Render Blueprint format:
+# See https://render.com/docs/blueprint-spec for details
+
+# ============================================================
+# SERVICES
+# ============================================================
+services:
+  # ----------------------------------------------------------
+  # Web Service: filtergenie
+  # ----------------------------------------------------------
+  - name: {{cookiecutter.project_name}}
+    type: web
+    runtime: docker
+    plan: starter
+    repo: https://github.com/{{cookiecutter.author_github_handle}}/{{cookiecutter.project_name}}
+    region: frankfurt
+    branch: main
+
+    # -------------------------------
+    # Docker Configuration
+    # -------------------------------
+    dockerfilePath: ./Dockerfile
+
+    # -------------------------------
+    # Deployment Settings
+    # -------------------------------
+    autoDeployTrigger: checksPass
+    healthCheckPath: /health
+
+    # -------------------------------
+    # Build Configuration
+    # -------------------------------
+    buildFilter:
+      # --- Included Paths ---
+      paths:
+        - render.yaml
+        - Dockerfile
+        - .dockerignore
+        - .python-version
+        - uv.lock
+      # --- Ignored Paths ---
+      ignoredPaths:
+        - tests/**
+
+    # -------------------------------
+    # Environment Variables
+    # -------------------------------
+    envVars:
+      - key: FOO
+        value: bar
