@@ -14,5 +14,4 @@ wheels/
 *.ipynb
 TODO.txt
 .coverage
-test_*
 profile_reports/
