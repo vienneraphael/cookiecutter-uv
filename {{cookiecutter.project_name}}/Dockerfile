@@ -1,21 +1,21 @@
-# Install uv
-FROM python:3.12-slim
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
-# Change the working directory to the `app` directory
 WORKDIR /app
 
-# Copy the lockfile and `pyproject.toml` into the image
-COPY uv.lock /app/uv.lock
-COPY pyproject.toml /app/pyproject.toml
+COPY pyproject.toml uv.lock ./
 
-# Install dependencies
-RUN uv sync --frozen --no-install-project
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_FROZEN=1 \
+    UV_LINK_MODE=copy \
+    UV_NO_INSTALLER_METADATA=1 \
+    VIRTUAL_ENV=/app/.venv \
+    PYTHONUNBUFFERED=1
 
-# Copy the project into the image
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --no-install-project --no-dev
+
+ENV PATH="/app/.venv/bin:$PATH"
+
 COPY . /app
-
-# Sync the project
-RUN uv sync --frozen
 
 CMD [ "python", "{{cookiecutter.project_slug}}/foo.py" ]
