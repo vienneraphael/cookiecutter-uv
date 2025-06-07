@@ -53,17 +53,17 @@ if __name__ == "__main__":
     else:
         subprocess.run([uv_executable, "lock", "--directory", PROJECT_DIRECTORY], check=True)
         subprocess.run([uv_executable, "sync", "--locked", "--dev"], cwd=PROJECT_DIRECTORY, check=True)
-    precommit_executable = shutil.which("pre-commit")
-    if precommit_executable is None:
-        print("pre-commit executable not found in PATH, can't install pre-commit hooks.")
-    else:
-        subprocess.run([precommit_executable, "run", "-a"], cwd=PROJECT_DIRECTORY)
     if "{{cookiecutter.create_github_repo}}}" != "n":
         git_executable = shutil.which("git")
         if git_executable is None:
             print("git executable not found in PATH, passing GitHub repository creation.")
         else:
             subprocess.run([git_executable, "-C", PROJECT_DIRECTORY, "init"], check=True)
+            precommit_executable = shutil.which("pre-commit")
+            if precommit_executable is None:
+                print("pre-commit executable not found in PATH, can't install pre-commit hooks.")
+            else:
+                subprocess.run([precommit_executable, "run", "-a"], cwd=PROJECT_DIRECTORY)
             subprocess.run([git_executable, "-C", PROJECT_DIRECTORY, "add", "."], check=True)
             subprocess.run([git_executable, "-C", PROJECT_DIRECTORY, "commit", "-m", "Initial commit"], check=True)
             gh_executable = shutil.which("gh")
