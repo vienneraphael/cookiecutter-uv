@@ -1,7 +1,7 @@
-{% if {{cookiecutter.layout}} == "src" %}
+{% if cookiecutter.layout == "src" %}
 from {{cookiecutter.project_name}}.main import main
 {% else %}
-{% if {{cookiecutter.layout}} == "backend" %}
+{% if cookiecutter.layout == "backend" %}
 from {{cookiecutter.layout}}.main import main
 {% endif %}
 
