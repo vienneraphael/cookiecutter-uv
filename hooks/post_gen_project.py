@@ -47,7 +47,11 @@ if __name__ == "__main__":
         if os.path.isdir("src"):
             remove_dir("src")
         move_dir("{{cookiecutter.project_slug}}", os.path.join("src", "{{cookiecutter.project_slug}}"))
-
+    uv_executable = shutil.which("uv")
+    if uv_executable is None:
+        print("uv executable not found in PATH, can't generate lockfile.")
+    else:
+        subprocess.run([uv_executable, "lock", "--directory", PROJECT_DIRECTORY], check=True)
     if "{{cookiecutter.create_github_repo}}}" != "n":
         git_executable = shutil.which("git")
         if git_executable is None:
