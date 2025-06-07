@@ -4,7 +4,7 @@
   "author_github_handle": "vienneraphael",
   "project_name": "example-project",
   "project_slug": "{{cookiecutter.project_name|lower|replace('-', '_')}}",
-  "project_description": "",
+  "project_description": "This is my example project",
   "layout": [
     "src",
     "flat",
