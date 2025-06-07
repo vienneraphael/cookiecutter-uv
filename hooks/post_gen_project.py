@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 
 PROJECT_DIRECTORY = os.path.realpath(os.path.curdir)
 
@@ -46,3 +47,36 @@ if __name__ == "__main__":
         if os.path.isdir("src"):
             remove_dir("src")
         move_dir("{{cookiecutter.project_slug}}", os.path.join("src", "{{cookiecutter.project_slug}}"))
+
+    if "{{cookiecutter.create_github_repo}}}" != "n":
+        git_executable = shutil.which("git")
+        if git_executable is None:
+            print("git executable not found in PATH, passing GitHub repository creation.")
+        else:
+            subprocess.run([git_executable, "-C", PROJECT_DIRECTORY, "init"], check=True)
+            subprocess.run([git_executable, "-C", PROJECT_DIRECTORY, "add", "."], check=True)
+            subprocess.run([git_executable, "-C", PROJECT_DIRECTORY, "commit", "-m", "Initial commit"], check=True)
+            gh_executable = shutil.which("gh")
+            if gh_executable is None:
+                print("gh executable not found in PATH, please install GitHub CLI to create a repository.")
+            else:
+                if not subprocess.run(
+                    [gh_executable, "auth", "status", "--show-token"],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                ):
+                    print("You are not authenticated with GitHub CLI. Starting authentification...")
+                    subprocess.run([gh_executable, "auth", "login"], check=True)
+                subprocess.run(
+                    [
+                        gh_executable,
+                        "repo",
+                        "create",
+                        "{{cookiecutter.project_name}}",
+                        "--{{cookiecutter.create_github_repo}}",
+                        "--source",
+                        PROJECT_DIRECTORY,
+                        "--push",
+                    ]
+                )

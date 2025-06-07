@@ -32,5 +32,10 @@
   "makefile": [
     "n",
     "y"
+  ],
+  "create_github_repo": [
+    "private",
+    "public",
+    "n"
   ]
 }

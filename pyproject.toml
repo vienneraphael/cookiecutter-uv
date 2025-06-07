@@ -83,6 +83,11 @@ extend_exclude = [
 [tool.deptry.per_rule_ignores]
 DEP002 = ["cookiecutter"]
 
+[tool.bandit]
+ignore = [
+    "B603"
+]
+
 [tool.ruff]
 target-version = "py39"
 line-length = 120
@@ -126,6 +131,7 @@ ignore = [
     "E501",
     # DoNotAssignLambda
     "E731",
+    "S603",
 ]
 
 [tool.ruff.lint.per-file-ignores]
