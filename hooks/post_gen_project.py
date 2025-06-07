@@ -52,6 +52,7 @@ if __name__ == "__main__":
         print("uv executable not found in PATH, can't generate lockfile.")
     else:
         subprocess.run([uv_executable, "lock", "--directory", PROJECT_DIRECTORY], check=True)
+        subprocess.run([uv_executable, "sync", "--locked", "--dev"], cwd=PROJECT_DIRECTORY, check=True)
     precommit_executable = shutil.which("pre-commit")
     if precommit_executable is None:
         print("pre-commit executable not found in PATH, can't install pre-commit hooks.")
