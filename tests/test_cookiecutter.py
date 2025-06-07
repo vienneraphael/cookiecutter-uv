@@ -92,14 +92,6 @@ def test_not_mkdocs(cookies, tmp_path):
         assert not os.path.isdir(f"{result.project_path}/docs")
 
 
-def test_tox(cookies, tmp_path):
-    with run_within_dir(tmp_path):
-        result = cookies.bake()
-        assert result.exit_code == 0
-        assert os.path.isfile(f"{result.project_path}/tox.ini")
-        assert file_contains_text(f"{result.project_path}/tox.ini", "[tox]")
-
-
 def test_dockerfile(cookies, tmp_path):
     with run_within_dir(tmp_path):
         result = cookies.bake(extra_context={"dockerfile": "y"})

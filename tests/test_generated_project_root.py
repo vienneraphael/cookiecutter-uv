@@ -28,7 +28,6 @@ def test_full_structure(cookies, tmp_path):
         "mkdocs.yml",
         "pyproject.toml",
         "tests",
-        "tox.ini",
     ]
 
     with run_within_dir(tmp_path):

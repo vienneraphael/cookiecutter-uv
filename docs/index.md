@@ -20,7 +20,6 @@ This is a modern Cookiecutter template that can be used to initiate a Python pro
 - Publishing to [PyPI](https://pypi.org) by creating a new release on GitHub
 - Testing and coverage with [pytest](https://docs.pytest.org/en/7.1.x/) and [codecov](https://about.codecov.io/)
 - Documentation with [MkDocs](https://www.mkdocs.org/)
-- Compatibility testing for multiple versions of Python with [tox-uv](https://github.com/tox-dev/tox-uv)
 - Containerization with [Docker](https://www.docker.com/) or [Podman](https://podman.io/)
 - Development environment with [VSCode devcontainers](https://code.visualstudio.com/docs/devcontainers/containers)
 

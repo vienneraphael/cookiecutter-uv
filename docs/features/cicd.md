@@ -22,9 +22,6 @@ whenever a pull request is opened or updated. They call the `action.yml`
 files to set-up the environment, run the tests, and check the code
 formatting.
 
-Additionally, all workflows check for compatibility with multiple Python
-versions if `tox` is set to `"y"`.
-
 # How to trigger a release?
 
 To trigger a new release, navigate to your repository on GitHub, click `Releases` on the right, and then select `Draft
