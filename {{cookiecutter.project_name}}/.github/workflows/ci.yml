@@ -49,8 +49,8 @@ jobs:
         with:
           python-version-file: .python-version
 
-      - name: Install Python dependencies (with local extra)
-        run: uv sync --locked --dev --extra local
+      - name: Install Python dependencies
+        run: uv sync --locked --dev
         env:
           UV_PROJECT_ENVIRONMENT: .venv
 
