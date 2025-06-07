@@ -2,20 +2,16 @@
 install: ## Install the virtual environment and install the pre-commit hooks
 	@echo "🚀 Creating virtual environment using uv"
 	@uv sync
-	@uv run pre-commit install
+	@uvx pre-commit install
 
 .PHONY: check
 check: ## Run code quality tools.
 	@echo "🚀 Checking lock file consistency with 'pyproject.toml'"
 	@uv lock --locked
 	@echo "🚀 Linting code: Running pre-commit"
-	@uv run pre-commit run -a
-	@echo "🚀 Static type checking: Running mypy"
-	@uv run mypy
-{%- if cookiecutter.deptry == 'y' %}
-	@echo "🚀 Checking for obsolete dependencies: Running deptry"
-	@uv run deptry {% if cookiecutter.layout == "src" %}src{% else %}.{% endif %}
-{%- endif %}
+	@uvx pre-commit run -a
+	@echo "🚀 Static type checking: Running ty"
+	@uvx ty check
 
 .PHONY: test
 test: ## Test the code with pytest
@@ -25,28 +21,6 @@ test: ## Test the code with pytest
 {%- else %}
 	@uv run python -m pytest --doctest-modules
 {%- endif%}
-
-.PHONY: build
-build: clean-build ## Build wheel file
-	@echo "🚀 Creating wheel file"
-	@uvx --from build pyproject-build --installer uv
-
-.PHONY: clean-build
-clean-build: ## Clean build artifacts
-	@echo "🚀 Removing build artifacts"
-	@uv run python -c "import shutil; import os; shutil.rmtree('dist') if os.path.exists('dist') else None"
-
-{%- if cookiecutter.mkdocs == "y" %}
-
-.PHONY: docs-test
-docs-test: ## Test if documentation can be built without warnings or errors
-	@uv run mkdocs build -s
-
-.PHONY: docs
-docs: ## Build and serve the documentation
-	@uv run mkdocs serve
-
-{%- endif %}
 
 .PHONY: help
 help:
