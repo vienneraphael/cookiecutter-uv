@@ -10,8 +10,8 @@
     "flat"
   ],
   "include_github_actions": [
-    "n",
-    "y"
+    "y",
+    "n"
   ],
   "codecov": [
     "y",
