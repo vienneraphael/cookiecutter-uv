@@ -49,7 +49,7 @@
   "create_github_repo": [
     "public",
     "private",
-    "internal"
-    "n",
+    "internal",
+    "n"
   ]
 }
