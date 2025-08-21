@@ -285,8 +285,9 @@ if __name__ == "__main__":
                     # créer la branche et un commit vide pour visibilité
                     git("checkout", "-b", br, check=True)
                     # Supprimer README.md sur toutes les branches sauf main
-                    remove_on_all_but_main(["README.md"])
                     git("commit", "--allow-empty", "-m", f"Initialize {br} branch", check=True)
+                
+                remove_on_all_but_main(["README.md"])
 
                 # Revenir sur main
                 try:
@@ -301,6 +302,7 @@ if __name__ == "__main__":
                     "TODO.md",
                     f"{project_slug}.egg-info",
                     os.path.join("src", f"{project_slug}.egg-info"),
+                    "src",
                 ])
 
             # Create and push GitHub repo with gh
@@ -370,6 +372,8 @@ if __name__ == "__main__":
                     git("checkout", "-b", br, check=True)
                     git("commit", "--allow-empty", "-m", f"Initialize {br} branch", check=True)
 
+                remove_on_all_but_main(["README.md"])
+
                 try:
                     git("checkout", "main", check=True)
                 except subprocess.CalledProcessError:
@@ -382,5 +386,5 @@ if __name__ == "__main__":
                     "TODO.md",
                     f"{project_slug}.egg-info",
                     os.path.join("src", f"{project_slug}.egg-info"),
+                    "src",
                 ])
-
