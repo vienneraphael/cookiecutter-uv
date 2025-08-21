@@ -1,14 +1,26 @@
 {
-  "author": "Raphael Vienne",
-  "email": "raphael.vienne@live.fr",
-  "author_github_handle": "vienneraphael",
-  "project_name": "example-project",
+  "author": "",
+  "email": "",
+  "role": ["datacrafter", "member", "other"],
+  "author_github_handle": "datacraft-paris",
+  
+  "project_name": "workshop-theme",
   "project_slug": "{{cookiecutter.project_name|lower|replace('-', '_')}}",
-  "project_description": "This is my example project",
+  "project_description": "This is my workshop on ",
+  "project_type": [
+    "python",
+    "notebook"
+  ],
+  "create_difficulty_branches": [
+    "y",
+    "n"
+  ],
+  "variant_branches": "easy, intermediate, hard, correction",
+  "push_difficulty_branches": "y",
+
   "layout": [
     "src",
-    "flat",
-    "backend"
+    "flat"
   ],
   "include_github_actions": [
     "y",
@@ -23,20 +35,20 @@
     "n"
   ],
   "render": [
-    "n",
-    "y"
+    "y",
+    "n"
   ],
   "devcontainer": [
-    "n",
-    "y"
+    "y",
+    "n"
   ],
   "makefile": [
-    "n",
-    "y"
+    "y",
+    "n"
   ],
   "create_github_repo": [
-    "private",
     "public",
+    "private",
     "n"
   ]
 }

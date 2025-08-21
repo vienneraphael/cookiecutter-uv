@@ -18,7 +18,3 @@ dev = [
 [build-system]
 requires = ["setuptools", "setuptools-scm"]
 build-backend = "setuptools.build_meta"
-{% if cookiecutter.layout == 'backend' %}
-[tool.setuptools]
-packages = ["{{cookiecutter.layout}}"]
-{% endif %}
