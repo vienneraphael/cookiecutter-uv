@@ -8,7 +8,6 @@ import json
 
 PROJECT_DIRECTORY = os.path.realpath(os.path.curdir)
 
-
 def remove_file(filepath: str) -> None:
     os.remove(os.path.join(PROJECT_DIRECTORY, filepath))
 
@@ -104,6 +103,60 @@ def remove_on_main(paths: list[str]) -> None:
     except subprocess.CalledProcessError:
         pass
 # ---------- FIN HELPERS UNIFORMISÉS ----------
+def remove_on_all_but_main(paths: list[str]) -> None:
+    """
+    Supprime les chemins donnés de toutes les branches sauf 'main'.
+    """
+    # Récupérer toutes les branches locales
+    cp = subprocess.run(
+        [shutil.which("git"), "-C", PROJECT_DIRECTORY, "branch", "--format=%(refname:short)"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    branches = [b.strip() for b in cp.stdout.splitlines() if b.strip()]
+    if not branches:
+        return
+
+    for br in branches:
+        if br == "main":
+            continue
+        try:
+            git("checkout", br, check=True)
+        except subprocess.CalledProcessError:
+            continue
+
+        existing = []
+        for p in paths:
+            abs_p = os.path.join(PROJECT_DIRECTORY, p)
+            if os.path.exists(abs_p):
+                existing.append(p)
+
+        if not existing:
+            continue
+
+        subprocess.run(
+            [shutil.which("git"), "-C", PROJECT_DIRECTORY, "rm", "-r", "--quiet", "--ignore-unmatch", *existing],
+            check=False,
+        )
+        for p in existing:
+            try:
+                os.remove(os.path.join(PROJECT_DIRECTORY, p))
+            except FileNotFoundError:
+                pass
+
+        git("add", "-A", check=True)
+        try:
+            git("commit", "-m", f"chore({br}): remove README.md", check=True)
+        except subprocess.CalledProcessError:
+            pass
+
+    # Revenir sur main à la fin
+    try:
+        git("checkout", "main", check=True)
+    except subprocess.CalledProcessError:
+        pass
+
 
 
 if __name__ == "__main__":
@@ -126,7 +179,7 @@ if __name__ == "__main__":
     if "{{cookiecutter.makefile}}" != "y":
         remove_file("Makefile")
 
-    # Layout handling (le template génère initialement {{cookiecutter.project_slug}} à la racine)
+    # Layout handling
     if "{{cookiecutter.layout}}" == "src":
         if os.path.isdir("src"):
             remove_dir("src")
@@ -220,7 +273,7 @@ if __name__ == "__main__":
 
             # Create difficulty branches (optional)
             if "{{cookiecutter.create_difficulty_branches}}" == "y":
-                raw = "{{cookiecutter.variant_branches}}"
+                raw = "{{cookiecutter.difficulty_branches}}"
                 branches = [b.strip() for b in raw.split(",") if b.strip()]
                 # S'assurer d'être sur main pour brancher depuis le commit initial
                 try:
@@ -231,6 +284,8 @@ if __name__ == "__main__":
                 for br in branches:
                     # créer la branche et un commit vide pour visibilité
                     git("checkout", "-b", br, check=True)
+                    # Supprimer README.md sur toutes les branches sauf main
+                    remove_on_all_but_main(["README.md"])
                     git("commit", "--allow-empty", "-m", f"Initialize {br} branch", check=True)
 
                 # Revenir sur main
@@ -240,7 +295,13 @@ if __name__ == "__main__":
                     pass
 
                 # *** SUPPRIMER slug + tests SUR MAIN AVANT CREATION/PUSH DU REPO ***
-                remove_on_main([slug_path, "tests"])
+                remove_on_main([
+                    slug_path,
+                    "tests",
+                    "TODO.md",
+                    f"{project_slug}.egg-info",
+                    os.path.join("src", f"{project_slug}.egg-info"),
+                ])
 
             # Create and push GitHub repo with gh
             gh_executable = shutil.which("gh")
@@ -276,7 +337,7 @@ if __name__ == "__main__":
                 # Pousser éventuellement les branches de difficulté
                 if "{{cookiecutter.create_difficulty_branches}}" == "y" and "{{cookiecutter.push_difficulty_branches}}" == "y":
                     if has_remote_origin():
-                        raw = "{{cookiecutter.variant_branches}}"
+                        raw = "{{cookiecutter.difficulty_branches}}"
                         branches = [b.strip() for b in raw.split(",") if b.strip()]
                         for br in branches:
                             try:
@@ -303,7 +364,7 @@ if __name__ == "__main__":
                 git("add", ".", check=True)
                 git("commit", "-m", "Initial commit", check=True)
 
-                raw = "{{cookiecutter.variant_branches}}"
+                raw = "{{cookiecutter.difficulty_branches}}"
                 branches = [b.strip() for b in raw.split(",") if b.strip()]
                 for br in branches:
                     git("checkout", "-b", br, check=True)
@@ -315,4 +376,11 @@ if __name__ == "__main__":
                     pass
 
                 # *** SUPPRIMER slug + tests SUR MAIN (cas sans GH) ***
-                remove_on_main([slug_path, "tests"])
+                remove_on_main([
+                    slug_path,
+                    "tests",
+                    "TODO.md",
+                    f"{project_slug}.egg-info",
+                    os.path.join("src", f"{project_slug}.egg-info"),
+                ])
+
