@@ -4,7 +4,6 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-
 import json
 
 PROJECT_DIRECTORY = os.path.realpath(os.path.curdir)
@@ -50,6 +49,63 @@ def has_remote_origin() -> bool:
     return cp.returncode == 0
 
 
+# ---------- HELPERS UNIFORMISÉS ----------
+def slug_dir_path(project_slug: str) -> str:
+    """
+    Retourne le chemin du dossier 'slug' selon le layout :
+      - layout == 'src'  -> 'src/<slug>'
+      - layout == 'flat' -> '<slug>'
+    """
+    layout = "{{cookiecutter.layout}}"
+    return os.path.join("src", project_slug) if layout == "src" else project_slug
+
+
+def remove_on_main(paths: list[str]) -> None:
+    """
+    Se place sur 'main', supprime les chemins s'ils existent du dépôt et du working tree,
+    puis commit la suppression. Ignore poliment si rien à faire.
+    """
+    try:
+        git("checkout", "main", check=True)
+    except subprocess.CalledProcessError:
+        return
+
+    existing = []
+    for p in paths:
+        if not p:
+            continue
+        abs_p = os.path.join(PROJECT_DIRECTORY, p)
+        if os.path.exists(abs_p):
+            existing.append(p)
+
+    if not existing:
+        return
+
+    git_executable = shutil.which("git")
+    if git_executable is not None:
+        subprocess.run(
+            [git_executable, "-C", PROJECT_DIRECTORY, "rm", "-r", "--quiet", "--ignore-unmatch", *existing],
+            check=False,
+        )
+
+    for p in existing:
+        abs_p = os.path.join(PROJECT_DIRECTORY, p)
+        if os.path.isdir(abs_p):
+            shutil.rmtree(abs_p, ignore_errors=True)
+        else:
+            try:
+                os.remove(abs_p)
+            except FileNotFoundError:
+                pass
+
+    git("add", "-A", check=True)
+    try:
+        git("commit", "-m", "chore(main): remove package slug and tests for main", check=True)
+    except subprocess.CalledProcessError:
+        pass
+# ---------- FIN HELPERS UNIFORMISÉS ----------
+
+
 if __name__ == "__main__":
     # Optional assets
     if "{{cookiecutter.include_github_actions}}" != "y":
@@ -70,7 +126,7 @@ if __name__ == "__main__":
     if "{{cookiecutter.makefile}}" != "y":
         remove_file("Makefile")
 
-    # Layout handling
+    # Layout handling (le template génère initialement {{cookiecutter.project_slug}} à la racine)
     if "{{cookiecutter.layout}}" == "src":
         if os.path.isdir("src"):
             remove_dir("src")
@@ -80,22 +136,25 @@ if __name__ == "__main__":
         if os.path.isdir("src"):
             remove_dir("src")
 
-    # Python or Notebook
+    # Types de projet
     project_type = "{{cookiecutter.project_type}}"
     project_slug = "{{cookiecutter.project_slug}}"
+
+    # Toujours garantir l'existence du dossier slug (après move éventuel ci-dessus)
+    slug_path = slug_dir_path(project_slug)
+    os.makedirs(slug_path, exist_ok=True)
 
     if project_type == "python":
         # Create TODO.md
         with open(os.path.join(PROJECT_DIRECTORY, "TODO.md"), "w") as f:
             f.write("# TODO\n\n- [ ] Implement features\n- [ ] Write tests\n")
 
-        # Create main.py depending on layout
-        if "{{cookiecutter.layout}}" == "src":
-            main_path = os.path.join(PROJECT_DIRECTORY, "src", project_slug, "main.py")
-        else:  # flat
-            main_path = os.path.join(PROJECT_DIRECTORY, project_slug, "main.py")
+        # Créer __init__.py pour déclarer le package
+        init_path = os.path.join(PROJECT_DIRECTORY, slug_path, "__init__.py")
+        open(init_path, "a").close()
 
-        os.makedirs(os.path.dirname(main_path), exist_ok=True)
+        # Créer main.py comme point d'entrée
+        main_path = os.path.join(PROJECT_DIRECTORY, slug_path, "main.py")
         with open(main_path, "w") as f:
             f.write(
                 'def main():\n'
@@ -105,6 +164,8 @@ if __name__ == "__main__":
             )
 
     elif project_type == "notebook":
+        # Pas de __init__.py ni main.py pour le mode notebook
+        notebook_path = os.path.join(PROJECT_DIRECTORY, slug_path, "notebook.ipynb")
         notebook_content = {
             "cells": [
                 {
@@ -117,8 +178,7 @@ if __name__ == "__main__":
             "nbformat": 4,
             "nbformat_minor": 5
         }
-
-        with open(os.path.join(PROJECT_DIRECTORY, "notebook.ipynb"), "w") as f:
+        with open(notebook_path, "w") as f:
             json.dump(notebook_content, f, indent=2)
 
     # Python deps with uv (optional)
@@ -135,7 +195,7 @@ if __name__ == "__main__":
         if git_executable is None:
             print("git executable not found in PATH, passing GitHub repository creation.")
         else:
-            # init repo with main as default (fallback if -b not supported)
+            # init repo with main as default (fallback si -b non supporté)
             try:
                 run([git_executable, "-C", PROJECT_DIRECTORY, "init", "-b", "main"], check=True)
             except subprocess.CalledProcessError:
@@ -143,7 +203,6 @@ if __name__ == "__main__":
                 try:
                     run([git_executable, "-C", PROJECT_DIRECTORY, "checkout", "-b", "main"], check=True)
                 except subprocess.CalledProcessError:
-                    # As a last resort, continue on whatever default branch exists
                     pass
 
             # initial add/commit
@@ -153,7 +212,7 @@ if __name__ == "__main__":
             if precommit_executable is None:
                 print("pre-commit executable not found in PATH, can't install pre-commit hooks.")
             else:
-                # Run all hooks once; ignore failure to avoid blocking initialization
+                # Exécuter les hooks une fois; ignorer l'échec pour ne pas bloquer
                 subprocess.run([precommit_executable, "run", "-a"], cwd=PROJECT_DIRECTORY)
 
             git("add", ".", check=True)
@@ -163,30 +222,32 @@ if __name__ == "__main__":
             if "{{cookiecutter.create_difficulty_branches}}" == "y":
                 raw = "{{cookiecutter.variant_branches}}"
                 branches = [b.strip() for b in raw.split(",") if b.strip()]
-                # Ensure we're on main to branch from the initial commit
+                # S'assurer d'être sur main pour brancher depuis le commit initial
                 try:
                     git("checkout", "main", check=True)
                 except subprocess.CalledProcessError:
-                    # if 'main' does not exist, skip—branches will be created from current branch
                     pass
 
                 for br in branches:
-                    # create branch, make an empty commit for visibility
+                    # créer la branche et un commit vide pour visibilité
                     git("checkout", "-b", br, check=True)
                     git("commit", "--allow-empty", "-m", f"Initialize {br} branch", check=True)
 
-                # go back to main at the end
+                # Revenir sur main
                 try:
                     git("checkout", "main", check=True)
                 except subprocess.CalledProcessError:
                     pass
+
+                # *** SUPPRIMER slug + tests SUR MAIN AVANT CREATION/PUSH DU REPO ***
+                remove_on_main([slug_path, "tests"])
 
             # Create and push GitHub repo with gh
             gh_executable = shutil.which("gh")
             if gh_executable is None:
                 print("gh executable not found in PATH, please install GitHub CLI to create a repository.")
             else:
-                # Authenticate if needed
+                # Auth si besoin
                 auth_rc = subprocess.run(
                     [gh_executable, "auth", "status"],
                     check=False,
@@ -197,7 +258,7 @@ if __name__ == "__main__":
                     print("You are not authenticated with GitHub CLI. Starting authentication...")
                     run([gh_executable, "auth", "login"], check=True)
 
-                # Create repo and push current branch (main)
+                # Créer le repo et pousser la branche courante (main)
                 run(
                     [
                         gh_executable,
@@ -212,7 +273,7 @@ if __name__ == "__main__":
                     check=True,
                 )
 
-                # Optionally push difficulty branches
+                # Pousser éventuellement les branches de difficulté
                 if "{{cookiecutter.create_difficulty_branches}}" == "y" and "{{cookiecutter.push_difficulty_branches}}" == "y":
                     if has_remote_origin():
                         raw = "{{cookiecutter.variant_branches}}"
@@ -225,7 +286,7 @@ if __name__ == "__main__":
                     else:
                         print("Remote 'origin' not found; skipping push of difficulty branches.")
     else:
-        # Repo not requested; still optionally create local branches for consistency
+        # Pas de repo distant; on peut quand même créer les branches localement
         if "{{cookiecutter.create_difficulty_branches}}" == "y":
             git_executable = shutil.which("git")
             if git_executable is None:
@@ -241,12 +302,17 @@ if __name__ == "__main__":
                         pass
                 git("add", ".", check=True)
                 git("commit", "-m", "Initial commit", check=True)
+
                 raw = "{{cookiecutter.variant_branches}}"
                 branches = [b.strip() for b in raw.split(",") if b.strip()]
                 for br in branches:
                     git("checkout", "-b", br, check=True)
                     git("commit", "--allow-empty", "-m", f"Initialize {br} branch", check=True)
+
                 try:
                     git("checkout", "main", check=True)
                 except subprocess.CalledProcessError:
                     pass
+
+                # *** SUPPRIMER slug + tests SUR MAIN (cas sans GH) ***
+                remove_on_main([slug_path, "tests"])

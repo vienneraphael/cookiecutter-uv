@@ -11,7 +11,10 @@ wheels/
 
 # Other
 .env
-*.ipynb
 TODO.txt
 .coverage
 profile_reports/
+
+{% if cookiecutter.project_type == "python" %}
+*.ipynb
+{% endif %}
