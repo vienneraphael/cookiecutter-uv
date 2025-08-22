@@ -3,6 +3,9 @@
 {{cookiecutter.project_description}}
 
 ---
+> **Note**:
+You are currently on the main branch. You will find all other files for your workshop on the other branches : `easy`, `intermediate`, `hard`and `correction`.
+---
 
 ## Table of Contents
 - **[Learning Objectives](#learning-objectives)**

@@ -14,17 +14,20 @@ GH_EXE: Optional[str] = shutil.which("gh")
 UV_EXE: Optional[str] = shutil.which("uv")
 PRE_COMMIT_EXE: Optional[str] = shutil.which("pre-commit")
 
+push_difficulty_branches = "y"
+difficulty_branches = "easy, intermediate, hard, correction"
 
 def run(cmd: List[str], check: bool = True, cwd: Optional[Path] = None, **popen_kwargs) -> subprocess.CompletedProcess:
     """Exécute une commande système."""
     return subprocess.run(cmd, check=check, cwd=str(cwd) if cwd else None, **popen_kwargs)
 
 
-def git(*args: str, check: bool = True) -> subprocess.CompletedProcess:
+def git(*args: str, check: bool = True, **popen_kwargs) -> subprocess.CompletedProcess:
     """Exécute une commande git dans PROJECT_DIRECTORY."""
     if GIT_EXE is None:
         raise RuntimeError("git executable not found in PATH.")
-    return run([GIT_EXE, "-C", str(PROJECT_DIRECTORY), *args], check=check)
+    return run([GIT_EXE, "-C", str(PROJECT_DIRECTORY), *args], check=check, **popen_kwargs)
+
 
 
 def has_remote_origin() -> bool:
@@ -53,7 +56,6 @@ def is_inside_git_repo() -> bool:
     return (cp.returncode == 0) and (cp.stdout.strip().lower() == "true")
 
 
-# ---------- HELPERS UNIFORMISÉS ----------
 def slug_dir_path(project_slug: str) -> str:
     """
     Retourne le chemin du dossier 'slug' selon le layout :
@@ -84,27 +86,6 @@ def _fs_remove_paths(paths: list[str]) -> list[str]:
                     pass
             removed.append(p)
     return removed
-
-
-def remove_on_main(paths: list[str]) -> None:
-    """
-    Se place sur 'main', supprime (FS) les chemins s'ils existent, puis commit la suppression.
-    Ignore poliment si rien à faire.
-    """
-    try:
-        git("checkout", "main", check=True)
-    except subprocess.CalledProcessError:
-        return
-
-    removed = _fs_remove_paths(paths)
-    if not removed:
-        return
-
-    git("add", "-A", check=True)
-    try:
-        git("commit", "-m", "main: remove package slug and tests for workshop scaffolding", check=True)
-    except subprocess.CalledProcessError:
-        pass
 
 
 def remove_on_all_but_main(paths: list[str]) -> None:
@@ -149,29 +130,71 @@ def remove_on_all_but_main(paths: list[str]) -> None:
         pass
 
 
-def _replace_readme(project_name: str) -> None:
+def keep_only_readme_on_main() -> None:
     """
-    Remplace le README.md courant par un modèle spécifique à la branche.
+    Sur la branche main, supprime TOUT le contenu du dépôt
+    sauf README.md
     """
+    try:
+        git("checkout", "main", check=True)
+    except subprocess.CalledProcessError:
+        return
+
+    keep = {"README.md", ".git"}
+    removed_any = False
+
+    for entry in PROJECT_DIRECTORY.iterdir():
+        name = entry.name
+        if name in keep:
+            continue
+        if entry.is_dir():
+            shutil.rmtree(entry, ignore_errors=True)
+            removed_any = True
+        else:
+            try:
+                entry.unlink()
+                removed_any = True
+            except FileNotFoundError:
+                pass
+
+    if removed_any:
+        git("add", "-A", check=True)
+        try:
+            git("commit", "-m", "main: keep only README.md", check=True)
+        except subprocess.CalledProcessError:
+            pass
+
+
+def _safe_commit(message: str):
+        git("add", "-A", check=True)
+
+        res = git("status", "--porcelain", check=False, capture_output=True, text=True)
+        if res.stdout.strip() == "":
+            print("Aucun changement détecté, commit ignoré.")
+            return
+
+        git("commit", "-m", message, check=True)
+
+
+def _remove_readme(project_name: str) -> None:
     readme_path = PROJECT_DIRECTORY / "README.md"
-    # Suppression FS (pas de git rm ici, on standardise l'approche)
     try:
         readme_path.unlink()
     except FileNotFoundError:
         pass
 
     readme_path.write_text(
-        f"# {project_name} — To do\n\n"
+        f"# READ ME"
         "## This README is for your instructions \n\n",
         encoding="utf-8",
     )
     git("add", "README.md", check=True)
-    git("commit", "-m", f"docs: branch-specific README for {project_name}", check=True)
+    _safe_commit(f"docs: branch-specific README for {project_name}")
 
 
 def create_difficulty_branches(branches: list[str], project_name: str) -> None:
     """
-    Crée les branches de difficulté à partir de main, ajoute un commit vide, et remplace le README.
+    Crée les branches de difficulté à partir de main avec le bon README
     """
     try:
         git("checkout", "main", check=True)
@@ -181,16 +204,15 @@ def create_difficulty_branches(branches: list[str], project_name: str) -> None:
     for br in branches:
         git("checkout", "-b", br, check=True)
         git("commit", "--allow-empty", "-m", f"Initialize {br} branch", check=True)
-        _replace_readme(project_name)
+        _remove_readme(project_name)
 
-    # Revenir sur main
+    # retour sur main
     try:
         git("checkout", "main", check=True)
     except subprocess.CalledProcessError:
         pass
 
 
-# ---------- FIN HELPERS UNIFORMISÉS ----------
 
 if __name__ == "__main__":
     # Optional assets
@@ -226,6 +248,11 @@ if __name__ == "__main__":
         except FileNotFoundError:
             pass
 
+    if "{{cookiecutter.tests_file}}" != "y":
+        if (PROJECT_DIRECTORY / "tests").exists():
+            shutil.rmtree(PROJECT_DIRECTORY / "tests", ignore_errors=True)
+
+
     # Layout handling
     if "{{cookiecutter.layout}}" == "src":
         if (PROJECT_DIRECTORY / "src").exists():
@@ -252,7 +279,7 @@ if __name__ == "__main__":
 
     if project_type == "python":
         # Create TODO.md
-        (PROJECT_DIRECTORY / "TODO.md").write_text("# TODO\n\n- [ ] Implement features for your workshop\n", encoding="utf-8")
+        (PROJECT_DIRECTORY / "TODO.md").write_text("# TODO\n\n- Implement features for your workshop\n", encoding="utf-8")
 
         # Créer __init__.py pour déclarer le package
         init_path = PROJECT_DIRECTORY / slug_path / "__init__.py"
@@ -276,20 +303,35 @@ if __name__ == "__main__":
                 {
                     "cell_type": "markdown",
                     "metadata": {},
-                    "source": ["## Welcome to {{cookiecutter.project_name}} notebook \n # Implement features for your workshop"]
+                    "source": [
+                        "## Welcome to {{cookiecutter.project_name}} notebook \n"
+                        "# Implement features for your workshop"
+                    ]
                 }
             ],
             "metadata": {
-                "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
+                "kernelspec": {
+                    "display_name": "Python 3",
+                    "language": "python",
+                    "name": "python3"
+                },
                 "language_info": {"name": "python", "version": "3"}
             },
             "nbformat": 4,
             "nbformat_minor": 5
         }
+
+        # Création du dossier et écriture du notebook
         notebook_path.parent.mkdir(parents=True, exist_ok=True)
         notebook_path.write_text(json.dumps(notebook_content, indent=2), encoding="utf-8")
 
-    # Python deps with uv (optional)
+        # Suppression éventuelle des fichiers main.py et __init__.py
+        for filename in ["main.py", "__init__.py"]:
+            file_path = PROJECT_DIRECTORY / slug_path / filename
+            if file_path.exists():
+                file_path.unlink()
+
+    # Python deps with uv
     pyproject = PROJECT_DIRECTORY / "pyproject.toml"
     if UV_EXE is None or not pyproject.exists():
         print("Skipping uv: missing 'uv' executable or 'pyproject.toml'.")
@@ -332,19 +374,13 @@ if __name__ == "__main__":
 
             # Create difficulty branches (optional)
             if "{{cookiecutter.create_difficulty_branches}}" == "y":
-                raw = "{{cookiecutter.difficulty_branches}}"
+                raw = difficulty_branches
                 branches = [b.strip() for b in raw.split(",") if b.strip()]
                 create_difficulty_branches(branches, project_name)
 
-                # *** SUPPRIMER slug + tests SUR MAIN AVANT CREATION/PUSH DU REPO ***
-                remove_on_main([
-                    str(slug_path),
-                    "tests",
-                    "TODO.md",
-                    f"{project_slug}.egg-info",
-                    os.path.join("src", f"{project_slug}.egg-info"),
-                    "src",
-                ])
+                # *** Réduire main à README.md uniquement ***
+                keep_only_readme_on_main()
+
 
             # Create and push GitHub repo with gh
             if GH_EXE is None:
@@ -376,9 +412,9 @@ if __name__ == "__main__":
                     )
 
                     # Pousser éventuellement les branches de difficulté
-                    if "{{cookiecutter.create_difficulty_branches}}" == "y" and "{{cookiecutter.push_difficulty_branches}}" == "y":
+                    if "{{cookiecutter.create_difficulty_branches}}" == "y" and push_difficulty_branches == "y":
                         if has_remote_origin():
-                            raw = "{{cookiecutter.difficulty_branches}}"
+                            raw = difficulty_branches
                             branches = [b.strip() for b in raw.split(",") if b.strip()]
                             for br in branches:
                                 try:
@@ -408,16 +444,9 @@ if __name__ == "__main__":
                 except subprocess.CalledProcessError:
                     pass
 
-                raw = "{{cookiecutter.difficulty_branches}}"
+                raw = difficulty_branches
                 branches = [b.strip() for b in raw.split(",") if b.strip()]
                 create_difficulty_branches(branches, project_name)
 
-                # *** SUPPRIMER slug + tests SUR MAIN (cas sans GH) ***
-                remove_on_main([
-                    str(slug_path),
-                    "tests",
-                    "TODO.md",
-                    f"{project_slug}.egg-info",
-                    os.path.join("src", f"{project_slug}.egg-info"),
-                    "src",
-                ])
+                # *** Réduire main à README.md uniquement ***
+                keep_only_readme_on_main()
