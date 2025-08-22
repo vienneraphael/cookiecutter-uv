@@ -11,7 +11,6 @@ You are currently on the main branch. You will find all other files for your wor
 - **[Learning Objectives](#learning-objectives)**
 - **[Workshop Structure](#workshop-structure)**
 - **[Repository Organization](#repository-organization)**
-- **[Getting Started](#getting-started)**
 
 ---
 
