@@ -2,7 +2,7 @@
   "author": "",
   "email": "",
   "role": ["datacrafter", "member", "other"],
-  "author_github_handle": "datacraft-paris",
+  "repository_owner": "datacraft-paris",
   
   "project_name": "workshop-theme",
   "project_slug": "{{cookiecutter.project_name|lower|replace('-', '_')}}",

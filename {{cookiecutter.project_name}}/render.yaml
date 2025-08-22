@@ -12,7 +12,7 @@ services:
     type: web
     runtime: docker
     plan: starter
-    repo: https://github.com/{{cookiecutter.author_github_handle}}/{{cookiecutter.project_name}}
+    repo: https://github.com/{{cookiecutter.repository_owner}}/{{cookiecutter.project_name}}
     region: frankfurt
     branch: main
 
