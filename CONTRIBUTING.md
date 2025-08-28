@@ -9,7 +9,7 @@ You can contribute in many ways:
 
 ## Report Bugs
 
-Report bugs at <https://github.com/fpgmaas/cookiecutter-uv/issues
+Report bugs at <tech@datacraft.paris>
 
 If you are reporting a bug, please include:
 
@@ -33,26 +33,26 @@ Cookiecutter PyPackage could always use more documentation, whether as part of t
 
 ## Submit Feedback
 
-The best way to send feedback is to file an issue at <https://github.com/fpgmaas/cookiecutter-uv/issues.
+The best way to send feedback is to file an issue at <tech@datacraft.paris>
 
 If you are proposing a new feature:
 
 - Explain in detail how it would work.
 - Keep the scope as narrow as possible, to make it easier to implement.
-- Remember that this is a volunteer-driven project, and that contributions are welcome :)
+- Remember that this is a volunteer-driven project, and that contributions are welcome :
 
 # Get Started!
 
-Ready to contribute? Here\'s how to set up `cookiecutter-uv` for local development.
+Ready to contribute? Here\'s how to set up `cookiecutter-workshop-template` for local development.
 Please note this documentation assumes you already have `uv` and `git` installed and ready to go.
 
-1. Fork the `cookiecutter-uv` repo on GitHub.
+1. Fork the `cookiecutter-workshop-template` repo on GitHub.
 
 2. Clone your fork locally:
 
 ```bash
 cd <directory_in_which_repo_should_be_created
-git clone git@github.com:YOUR_NAME/cookiecutter-uv.git
+git clone git@github.com:YOUR_NAME/cookiecutter-workshop-template.git
 ```
 
 3. Now we need to install the environment.
