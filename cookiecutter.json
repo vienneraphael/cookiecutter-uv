@@ -1,38 +1,22 @@
 {
   "author": "",
   "email": "",
-  "role": ["datacrafter", "member", "other"],
   "repository_owner": "datacraft-paris",
-  
   "project_name": "workshop-theme",
   "project_slug": "{{cookiecutter.project_name|lower|replace('-', '_')}}",
   "project_description": "This is my workshop on {{cookiecutter.project_slug}}",
-
   "project_type": [
     "python",
     "notebook"
   ],
-
   "layout": [
     "src",
     "flat"
   ],
-
-  "tests_file" : [
-    "y",
-    "n"
-  ],
-
   "include_github_actions": [
     "y",
     "n"
   ],
-
- "create_difficulty_branches": [
-    "y",
-    "n"
-  ],
-
   "codecov": [
     "y",
     "n"

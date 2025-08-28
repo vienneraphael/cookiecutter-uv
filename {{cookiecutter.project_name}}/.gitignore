@@ -10,11 +10,10 @@ wheels/
 .venv
 
 # Other
+{% if cookiecutter.project_type == "python" %}
+*.ipynb
+{% endif %}
 .env
 TODO.txt
 .coverage
 profile_reports/
-
-{% if cookiecutter.project_type == "python" %}
-*.ipynb
-{% endif %}

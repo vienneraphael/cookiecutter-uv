@@ -1,37 +1,64 @@
 #!/usr/bin/env python
+from __future__ import annotations
 
-import os
+import json
 import shutil
 import subprocess
-import json
+from collections.abc import Sequence
+from contextlib import suppress
 from pathlib import Path
-from typing import List, Optional
+from typing import Any
+
+# Constants & tool detection
+
+PROJECT_DIRECTORY = Path.cwd().resolve()
+GIT_EXE: str | None = shutil.which("git")
+GH_EXE: str | None = shutil.which("gh")
+UV_EXE: str | None = shutil.which("uv")
+PRE_COMMIT_EXE: str | None = shutil.which("pre-commit")
+
+# Branches created when requested by the template
+_DIFFICULTY_BRANCHES_RAW = "correction"
 
 
-PROJECT_DIRECTORY = Path(os.path.realpath(os.path.curdir))
-GIT_EXE: Optional[str] = shutil.which("git")
-GH_EXE: Optional[str] = shutil.which("gh")
-UV_EXE: Optional[str] = shutil.which("uv")
-PRE_COMMIT_EXE: Optional[str] = shutil.which("pre-commit")
-
-push_difficulty_branches = "y"
-difficulty_branches = "easy, intermediate, hard, correction"
-
-def run(cmd: List[str], check: bool = True, cwd: Optional[Path] = None, **popen_kwargs) -> subprocess.CompletedProcess:
-    """Exécute une commande système."""
-    return subprocess.run(cmd, check=check, cwd=str(cwd) if cwd else None, **popen_kwargs)
+# Errors
 
 
-def git(*args: str, check: bool = True, **popen_kwargs) -> subprocess.CompletedProcess:
-    """Exécute une commande git dans PROJECT_DIRECTORY."""
+class GitNotFoundError(RuntimeError):
+    """Raised when the git executable cannot be located in PATH."""
+
+    def __init__(self) -> None:
+        super().__init__("git executable not found in PATH.")
+
+
+# Helper functions
+
+
+def _run(
+    cmd: Sequence[str],
+    *,
+    check: bool = True,
+    cwd: Path | None = None,
+    **popen_kwargs: Any,
+) -> subprocess.CompletedProcess[Any]:
+    """Run a system command."""
+    return subprocess.run(
+        list(cmd),
+        check=check,
+        cwd=str(cwd or PROJECT_DIRECTORY),
+        **popen_kwargs,
+    )
+
+
+def _git(*args: str, check: bool = True, **popen_kwargs: Any) -> subprocess.CompletedProcess[Any]:
+    """Run a git command inside :data:`PROJECT_DIRECTORY`."""
     if GIT_EXE is None:
-        raise RuntimeError("git executable not found in PATH.")
-    return run([GIT_EXE, "-C", str(PROJECT_DIRECTORY), *args], check=check, **popen_kwargs)
+        raise GitNotFoundError()
+    return _run([GIT_EXE, "-C", str(PROJECT_DIRECTORY), *args], check=check, **popen_kwargs)
 
 
-
-def has_remote_origin() -> bool:
-    """Retourne True si un remote 'origin' est configuré."""
+def _has_remote_origin() -> bool:
+    """Return True if a remote named origin exists."""
     if GIT_EXE is None:
         return False
     cp = subprocess.run(
@@ -43,7 +70,8 @@ def has_remote_origin() -> bool:
     return cp.returncode == 0
 
 
-def is_inside_git_repo() -> bool:
+def _inside_git_repo() -> bool:
+    """Return True if inside a git repo."""
     if GIT_EXE is None:
         return False
     cp = subprocess.run(
@@ -56,397 +84,398 @@ def is_inside_git_repo() -> bool:
     return (cp.returncode == 0) and (cp.stdout.strip().lower() == "true")
 
 
-def slug_dir_path(project_slug: str) -> str:
-    """
-    Retourne le chemin du dossier 'slug' selon le layout :
-      - layout == 'src'  -> 'src/<slug>'
-      - layout == 'flat' -> '<slug>'
-    """
-    layout = "{{cookiecutter.layout}}"
-    return os.path.join("src", project_slug) if layout == "src" else project_slug
-
-
-def _fs_remove_paths(paths: list[str]) -> list[str]:
-    """
-    Supprime les chemins (FS) s'ils existent et retourne la liste de ceux effectivement supprimés.
-    On choisit la suppression FS + `git add -A` ensuite pour rester cohérents.
-    """
-    removed: list[str] = []
-    for p in paths:
-        if not p:
-            continue
-        abs_p = PROJECT_DIRECTORY / p
-        if abs_p.exists():
-            if abs_p.is_dir():
-                shutil.rmtree(abs_p, ignore_errors=True)
-            else:
-                try:
-                    abs_p.unlink()
-                except FileNotFoundError:
-                    pass
-            removed.append(p)
-    return removed
-
-
-def remove_on_all_but_main(paths: list[str]) -> None:
-    """
-    Supprime (FS) les chemins donnés de toutes les branches locales sauf 'main'.
-    """
-    if GIT_EXE is None:
+def _ensure_git_identity() -> None:
+    """Ensure a local Git identity so non-interactive commits work."""
+    if GIT_EXE is None or not _inside_git_repo():
         return
 
-    cp = subprocess.run(
-        [GIT_EXE, "-C", str(PROJECT_DIRECTORY), "branch", "--format=%(refname:short)"],
-        check=True,
-        capture_output=True,
+    name_rc = subprocess.run(
+        [GIT_EXE, "-C", str(PROJECT_DIRECTORY), "config", "--get", "user.name"],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
         text=True,
     )
-    branches = [b.strip() for b in cp.stdout.splitlines() if b.strip()]
-    if not branches:
-        return
-
-    for br in branches:
-        if br == "main":
-            continue
-        try:
-            git("checkout", br, check=True)
-        except subprocess.CalledProcessError:
-            continue
-
-        removed = _fs_remove_paths(paths)
-        if not removed:
-            continue
-
-        git("add", "-A", check=True)
-        try:
-            git("commit", "-m", f"{br}: remove selected files", check=True)
-        except subprocess.CalledProcessError:
-            pass
-
-    # Revenir sur main à la fin
-    try:
-        git("checkout", "main", check=True)
-    except subprocess.CalledProcessError:
-        pass
-
-
-def keep_only_readme_on_main() -> None:
-    """
-    Sur la branche main, supprime TOUT le contenu du dépôt
-    sauf README.md
-    """
-    try:
-        git("checkout", "main", check=True)
-    except subprocess.CalledProcessError:
-        return
-
-    keep = {"README.md", ".git"}
-    removed_any = False
-
-    for entry in PROJECT_DIRECTORY.iterdir():
-        name = entry.name
-        if name in keep:
-            continue
-        if entry.is_dir():
-            shutil.rmtree(entry, ignore_errors=True)
-            removed_any = True
-        else:
-            try:
-                entry.unlink()
-                removed_any = True
-            except FileNotFoundError:
-                pass
-
-    if removed_any:
-        git("add", "-A", check=True)
-        try:
-            git("commit", "-m", "main: keep only README.md", check=True)
-        except subprocess.CalledProcessError:
-            pass
-
-
-def _safe_commit(message: str):
-        git("add", "-A", check=True)
-
-        res = git("status", "--porcelain", check=False, capture_output=True, text=True)
-        if res.stdout.strip() == "":
-            print("Aucun changement détecté, commit ignoré.")
-            return
-
-        git("commit", "-m", message, check=True)
-
-
-def _remove_readme(project_name: str) -> None:
-    readme_path = PROJECT_DIRECTORY / "README.md"
-    try:
-        readme_path.unlink()
-    except FileNotFoundError:
-        pass
-
-    readme_path.write_text(
-        f"# READ ME"
-        "## This README is for your instructions \n\n",
-        encoding="utf-8",
+    email_rc = subprocess.run(
+        [GIT_EXE, "-C", str(PROJECT_DIRECTORY), "config", "--get", "user.email"],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
     )
-    git("add", "README.md", check=True)
-    _safe_commit(f"docs: branch-specific README for {project_name}")
+
+    if not name_rc.stdout.strip():
+        _run([GIT_EXE, "-C", str(PROJECT_DIRECTORY), "config", "user.name", "cookiecutter"], check=True)
+    if not email_rc.stdout.strip():
+        _run(
+            [GIT_EXE, "-C", str(PROJECT_DIRECTORY), "config", "user.email", "cookiecutter@example.com"],
+            check=True,
+        )
 
 
-def create_difficulty_branches(branches: list[str], project_name: str) -> None:
-    """
-    Crée les branches de difficulté à partir de main avec le bon README
-    """
-    try:
-        git("checkout", "main", check=True)
-    except subprocess.CalledProcessError:
-        pass
+def _slug_dir_path(project_slug: str) -> Path:
+    """Return the slug directory path according to the selected layout."""
+    layout = "{{cookiecutter.layout}}"
+    return (PROJECT_DIRECTORY / "src" / project_slug) if layout == "src" else (PROJECT_DIRECTORY / project_slug)
+
+
+def _safe_commit(message: str) -> None:
+    """Stage all changes and commit iff there is something to commit."""
+    _git("add", "-A", check=True)
+    res = _git("status", "--porcelain", check=False, capture_output=True, text=True)
+    if res.stdout.strip() == "":
+        print("No changes, skipping commit.")
+        return
+    _git("commit", "-m", message, "--no-verify", check=True)
+
+
+def _write_branch_readme(project_name: str) -> None:
+    """Write a minimal, valid README for a difficulty branch (no commit)"""
+    readme_path = PROJECT_DIRECTORY / "README.md"
+    with suppress(FileNotFoundError):
+        readme_path.unlink()
+    content = (
+        f"# {project_name}\n\n"
+        "## Workshop instructions\n\n"
+        "You are currently on the **correction** branch.\n"
+        "This project contains **2 branches**:\n\n"
+        "- **main** → used to introduce the theme of your workshop.\n"
+        "- **correction** → where you should implement everything you want to do.\n\n"
+        "After fully implementig this branch, you can create additional branches for each difficulty level "
+        "(for example: `easy`, `intermediate`, `hard`).\n"
+        "To do so, use the following command:\n\n"
+        "```bash\n"
+        "git checkout -b <branch-name>\n"
+        "```\n"
+    )
+
+    readme_path.write_text(content, encoding="utf-8")
+
+
+def _run_precommit_check(*, context: str, strict: bool = False, autocommit: bool = False) -> int:
+    """Execute `pre-commit run --all-files` and optionally commit autofixes.
+    Returns the return code from pre-commit."""
+    if PRE_COMMIT_EXE is None:
+        print(f"[pre-commit:{context}] not found in PATH. Skipping.")
+        return 0
+    if not _inside_git_repo():
+        print(f"[pre-commit:{context}] not in a Git repo. Skipping.")
+        return 0
+
+    subprocess.run([PRE_COMMIT_EXE, "install"], cwd=str(PROJECT_DIRECTORY))
+
+    print(f"[pre-commit:{context}] running hooks on all files…")
+    rc = subprocess.run([PRE_COMMIT_EXE, "run", "--all-files"], cwd=str(PROJECT_DIRECTORY)).returncode
+    if rc == 0:
+        print(f"[pre-commit:{context}] hooks passed.")
+    else:
+        print(f"[pre-commit:{context}] hooks failed with code {rc}.")
+        if strict:
+            raise SystemExit(rc)
+
+    return rc
+
+
+def _create_difficulty_branches(branches: list[str], project_name: str) -> None:
+    """Create difficulty branches from main with a single branch-specific commit."""
+    with suppress(subprocess.CalledProcessError):
+        _git("checkout", "main", check=True)
 
     for br in branches:
-        git("checkout", "-b", br, check=True)
-        git("commit", "--allow-empty", "-m", f"Initialize {br} branch", check=True)
-        _remove_readme(project_name)
+        _git("checkout", "-b", br, check=True)
+        _write_branch_readme(project_name)
+        _safe_commit("initializing branch with branch-specific README")
+        print()
+        _run_precommit_check(context=br, strict=False, autocommit=True)
 
-    # retour sur main
+    with suppress(subprocess.CalledProcessError):
+        _git("checkout", "main", check=True)
+
+
+def _ensure_git_repo(*, default_branch: str = "main") -> None:
+    """Ensure a Git repository exists and that ``default_branch`` is present."""
+    if GIT_EXE is None or _inside_git_repo():
+        return
     try:
-        git("checkout", "main", check=True)
+        _run([GIT_EXE, "-C", str(PROJECT_DIRECTORY), "init", "-b", default_branch], check=True)
     except subprocess.CalledProcessError:
-        pass
+        _run([GIT_EXE, "-C", str(PROJECT_DIRECTORY), "init"], check=True)
+        with suppress(subprocess.CalledProcessError):
+            _run([GIT_EXE, "-C", str(PROJECT_DIRECTORY), "checkout", "-b", default_branch], check=True)
 
+
+def _gh_git_protocol() -> str:
+    """Return 'ssh' or 'https' according to gh config (default https)."""
+    if GH_EXE is None:
+        return "https"
+    cp = subprocess.run(
+        [GH_EXE, "config", "get", "git_protocol"],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    proto = (cp.stdout or "").strip().lower()
+    return "ssh" if proto == "ssh" else "https"
+
+
+def _ensure_remote_origin(owner: str, name: str) -> None:
+    """Ensure a proper 'origin' remote pointing to owner/name (SSH or HTTPS)."""
+    proto = _gh_git_protocol()
+    url = f"git@github.com:{owner}/{name}.git" if proto == "ssh" else f"https://github.com/{owner}/{name}.git"
+    try:
+        _git("remote", "add", "origin", url, check=True)
+    except subprocess.CalledProcessError:
+        # S'il existe déjà, on met simplement à jour l'URL
+        _git("remote", "set-url", "origin", url, check=True)
+
+
+# Main
 
 
 if __name__ == "__main__":
-    # Optional assets
-    if "{{cookiecutter.include_github_actions}}" != "y":
-        if (PROJECT_DIRECTORY / ".github").exists():
-            shutil.rmtree(PROJECT_DIRECTORY / ".github", ignore_errors=True)
+    # Python deps with uv
+    pyproject = PROJECT_DIRECTORY / "pyproject.toml"
+    if UV_EXE is None or not pyproject.exists():
+        print("Skipping uv: missing 'uv' or 'pyproject.toml'.")
+    else:
+        _run([UV_EXE, "lock", "--directory", str(PROJECT_DIRECTORY)], check=True)
+        _run([UV_EXE, "sync", "--locked", "--dev"], check=True)
+
+    # Ensure a Git repo exists
+    _ensure_git_repo(default_branch="main")
+    _ensure_git_identity()
+
+    # Install pre-commit hooks (idempotent). Internal commits use --no-verify.
+    if PRE_COMMIT_EXE is None:
+        print("Install pre-commit with 'pipx install pre-commit' or 'pip install pre-commit'.")
+    else:
+        if _inside_git_repo():
+            print("Installing pre-commit hooks…")
+            subprocess.run([PRE_COMMIT_EXE, "install"], cwd=str(PROJECT_DIRECTORY))
+        else:
+            print("Not inside a Git repository, skipping pre-commit installation.")
+
+    # Optional assets (filesystem only; do not commit here)
+    if "{{cookiecutter.include_github_actions}}" != "y" and (PROJECT_DIRECTORY / ".github").exists():
+        shutil.rmtree(PROJECT_DIRECTORY / ".github", ignore_errors=True)
 
     if "{{cookiecutter.dockerfile}}" != "y":
-        try:
+        with suppress(FileNotFoundError):
             (PROJECT_DIRECTORY / "Dockerfile").unlink()
-        except FileNotFoundError:
-            pass
 
     if "{{cookiecutter.codecov}}" != "y":
-        try:
+        with suppress(FileNotFoundError):
             (PROJECT_DIRECTORY / "codecov.yaml").unlink()
-        except FileNotFoundError:
-            pass
 
-    if "{{cookiecutter.devcontainer}}" != "y":
-        if (PROJECT_DIRECTORY / ".devcontainer").exists():
-            shutil.rmtree(PROJECT_DIRECTORY / ".devcontainer", ignore_errors=True)
+    if "{{cookiecutter.devcontainer}}" != "y" and (PROJECT_DIRECTORY / ".devcontainer").exists():
+        shutil.rmtree(PROJECT_DIRECTORY / ".devcontainer", ignore_errors=True)
 
     if "{{cookiecutter.render}}" != "y":
-        try:
+        with suppress(FileNotFoundError):
             (PROJECT_DIRECTORY / "render.yaml").unlink()
-        except FileNotFoundError:
-            pass
 
     if "{{cookiecutter.makefile}}" != "y":
-        try:
+        with suppress(FileNotFoundError):
             (PROJECT_DIRECTORY / "Makefile").unlink()
-        except FileNotFoundError:
-            pass
 
-    if "{{cookiecutter.tests_file}}" != "y":
-        if (PROJECT_DIRECTORY / "tests").exists():
-            shutil.rmtree(PROJECT_DIRECTORY / "tests", ignore_errors=True)
-
-
-    # Layout handling
+    # Layout handling (filesystem only)
     if "{{cookiecutter.layout}}" == "src":
         if (PROJECT_DIRECTORY / "src").exists():
             shutil.rmtree(PROJECT_DIRECTORY / "src", ignore_errors=True)
-        # Déplacer le slug dans src/<slug>
         moved_src = PROJECT_DIRECTORY / "{{cookiecutter.project_slug}}"
         target_src = PROJECT_DIRECTORY / "src" / "{{cookiecutter.project_slug}}"
         target_src.parent.mkdir(parents=True, exist_ok=True)
         if moved_src.exists():
             shutil.move(str(moved_src), str(target_src))
 
-    if "{{cookiecutter.layout}}" == "flat":
-        if (PROJECT_DIRECTORY / "src").exists():
-            shutil.rmtree(PROJECT_DIRECTORY / "src", ignore_errors=True)
+    if "{{cookiecutter.layout}}" == "flat" and (PROJECT_DIRECTORY / "src").exists():
+        shutil.rmtree(PROJECT_DIRECTORY / "src", ignore_errors=True)
 
-    # Types de projet
+    # Project types (filesystem only)
     project_type = "{{cookiecutter.project_type}}"
     project_slug = "{{cookiecutter.project_slug}}"
     project_name = "{{cookiecutter.project_name}}"
 
-    # Toujours garantir l'existence du dossier slug (après move éventuel ci-dessus)
-    slug_path = Path(slug_dir_path(project_slug))
-    (PROJECT_DIRECTORY / slug_path).mkdir(parents=True, exist_ok=True)
+    slug_path = _slug_dir_path(project_slug)
+    slug_path.mkdir(parents=True, exist_ok=True)
 
     if project_type == "python":
-        # Create TODO.md
-        (PROJECT_DIRECTORY / "TODO.md").write_text("# TODO\n\n- Implement features for your workshop\n", encoding="utf-8")
-
-        # Créer __init__.py pour déclarer le package
-        init_path = PROJECT_DIRECTORY / slug_path / "__init__.py"
-        init_path.touch()
-
-        # Créer main.py comme point d'entrée
-        main_path = PROJECT_DIRECTORY / slug_path / "main.py"
-        main_path.write_text(
-            'def main():\n'
-            '    print("Hello from {{cookiecutter.project_name}}!")\n\n'
-            'if __name__ == "__main__":\n'
-            '    main()\n',
-            encoding="utf-8",
-        )
+        pass
 
     elif project_type == "notebook":
-        # Pas de __init__.py ni main.py pour le mode notebook
-        notebook_path = PROJECT_DIRECTORY / slug_path / "notebook.ipynb"
+        notebook_path = slug_path / "{{cookiecutter.project_slug}}.ipynb"
         notebook_content = {
             "cells": [
                 {
                     "cell_type": "markdown",
                     "metadata": {},
                     "source": [
-                        "## Welcome to {{cookiecutter.project_name}} notebook \n"
-                        "# Implement features for your workshop"
-                    ]
+                        "## Welcome to {{cookiecutter.project_name}} notebook\n",
+                        "Implement features for your workshop.",
+                    ],
                 }
             ],
             "metadata": {
-                "kernelspec": {
-                    "display_name": "Python 3",
-                    "language": "python",
-                    "name": "python3"
-                },
-                "language_info": {"name": "python", "version": "3"}
+                "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
+                "language_info": {"name": "python", "version": "3"},
             },
             "nbformat": 4,
-            "nbformat_minor": 5
+            "nbformat_minor": 5,
         }
-
-        # Création du dossier et écriture du notebook
         notebook_path.parent.mkdir(parents=True, exist_ok=True)
-        notebook_path.write_text(json.dumps(notebook_content, indent=2), encoding="utf-8")
-
-        # Suppression éventuelle des fichiers main.py et __init__.py
-        for filename in ["main.py", "__init__.py"]:
-            file_path = PROJECT_DIRECTORY / slug_path / filename
+        notebook_path.write_text(json.dumps(notebook_content, indent=2) + "\n", encoding="utf-8")
+        for filename in ("main.py", "__init__.py"):
+            file_path = slug_path / filename
             if file_path.exists():
                 file_path.unlink()
 
-    # Python deps with uv
-    pyproject = PROJECT_DIRECTORY / "pyproject.toml"
-    if UV_EXE is None or not pyproject.exists():
-        print("Skipping uv: missing 'uv' executable or 'pyproject.toml'.")
-    else:
-        run([UV_EXE, "lock", "--directory", str(PROJECT_DIRECTORY)], check=True)
-        run([UV_EXE, "sync", "--locked", "--dev"], cwd=PROJECT_DIRECTORY, check=True)
-
-    # Git init / first commit / branches / GitHub repo
+    # Minimal commits
     if "{{cookiecutter.create_github_repo}}" != "n":
         if GIT_EXE is None:
-            print("git executable not found in PATH, passing GitHub repository creation.")
+            print("git not found; skipping GitHub repo creation.")
         else:
-            # init repo with main as default (fallback si -b non supporté)
-            if not is_inside_git_repo():
+            if not _inside_git_repo():
                 try:
-                    run([GIT_EXE, "-C", str(PROJECT_DIRECTORY), "init", "-b", "main"], check=True)
+                    _run([GIT_EXE, "-C", str(PROJECT_DIRECTORY), "init", "-b", "main"], check=True)
                 except subprocess.CalledProcessError:
-                    run([GIT_EXE, "-C", str(PROJECT_DIRECTORY), "init"], check=True)
-                    try:
-                        run([GIT_EXE, "-C", str(PROJECT_DIRECTORY), "checkout", "-b", "main"], check=True)
-                    except subprocess.CalledProcessError:
-                        pass
+                    _run([GIT_EXE, "-C", str(PROJECT_DIRECTORY), "init"], check=True)
+                    with suppress(subprocess.CalledProcessError):
+                        _run([GIT_EXE, "-C", str(PROJECT_DIRECTORY), "checkout", "-b", "main"], check=True)
 
-            # initial add/commit
-            git("add", ".", check=True)
+            _ensure_git_identity()
 
-            if PRE_COMMIT_EXE is None:
-                print("pre-commit executable not found in PATH, can't install pre-commit hooks.")
+            # Single initial commit (local only)
+            _git("add", ".", check=True)
+            with suppress(subprocess.CalledProcessError):
+                _git("commit", "-m", "Initial commit", "--no-verify", check=True)
+
+            # 2) Difficulty branches — local only (no push)
+            branches = [b.strip() for b in _DIFFICULTY_BRANCHES_RAW.split(",") if b.strip()]
+            _create_difficulty_branches(branches, project_name)
+
+            # 3) Create/link the GitHub repo (no push)
+        if GH_EXE is None:
+            print("gh CLI not found; cannot create/link remote.")
+        else:
+            auth_rc = subprocess.run(
+                [GH_EXE, "auth", "status"],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            ).returncode
+            if auth_rc == 1:
+                print("Run 'gh auth login' to authenticate, then re-run if needed.")
             else:
-                # Installer puis exécuter les hooks une fois; ignorer l'échec pour ne pas bloquer
-                subprocess.run([PRE_COMMIT_EXE, "install"], cwd=str(PROJECT_DIRECTORY))
-                subprocess.run([PRE_COMMIT_EXE, "run", "-a"], cwd=str(PROJECT_DIRECTORY))
+                owner = "{{cookiecutter.repository_owner}}"
+                name = "{{cookiecutter.project_name}}"
+                full = f"{owner}/{name}"
 
-            git("add", ".", check=True)
-            try:
-                git("commit", "-m", "Initial commit", check=True)
-            except subprocess.CalledProcessError:
-                # Déjà commité ? on ignore
-                pass
-
-            # Create difficulty branches (optional)
-            if "{{cookiecutter.create_difficulty_branches}}" == "y":
-                raw = difficulty_branches
-                branches = [b.strip() for b in raw.split(",") if b.strip()]
-                create_difficulty_branches(branches, project_name)
-
-                # *** Réduire main à README.md uniquement ***
-                keep_only_readme_on_main()
-
-
-            # Create and push GitHub repo with gh
-            if GH_EXE is None:
-                print("gh executable not found in PATH, please install GitHub CLI to create a repository.")
-            else:
-                # Vérifier l'authentification; si absente, ne pas lancer login interactif
-                auth_rc = subprocess.run(
-                    [GH_EXE, "auth", "status"],
-                    check=False,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                ).returncode
-                if auth_rc == 1:
-                    print("You are not authenticated with GitHub CLI. Run 'gh auth login' and re-run creation if needed.")
+                if _has_remote_origin():
+                    print("Remote 'origin' already configured; skipping repo creation.")
                 else:
-                    # Créer le repo et pousser la branche courante (main)
-                    run(
-                        [
-                            GH_EXE,
-                            "repo",
-                            "create",
-                            f"{{cookiecutter.repository_owner}}/{{cookiecutter.project_name}}",
-                            "--{{cookiecutter.create_github_repo}}",
-                            "--source",
-                            str(PROJECT_DIRECTORY),
-                            "--push",
-                        ],
-                        check=True,
-                    )
+                    # if repo already exists, we link it to the remote repo
+                    exists_rc = subprocess.run(
+                        [GH_EXE, "repo", "view", full],
+                        check=False,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    ).returncode
 
-                    # Pousser éventuellement les branches de difficulté
-                    if "{{cookiecutter.create_difficulty_branches}}" == "y" and push_difficulty_branches == "y":
-                        if has_remote_origin():
-                            raw = difficulty_branches
-                            branches = [b.strip() for b in raw.split(",") if b.strip()]
-                            for br in branches:
-                                try:
-                                    git("push", "-u", "origin", br, check=True)
-                                except subprocess.CalledProcessError:
-                                    print(f"Warning: could not push branch '{br}'.")
-                        else:
-                            print("Remote 'origin' not found; skipping push of difficulty branches.")
+                    if exists_rc == 0:
+                        print(f"GitHub repo '{full}' already exists; linking 'origin'.")
+                        _ensure_remote_origin(owner, name)
+                    else:
+                        _run(
+                            [
+                                GH_EXE,
+                                "repo",
+                                "create",
+                                full,
+                                "--{{cookiecutter.create_github_repo}}",  # --public / --private
+                                "--source",
+                                str(PROJECT_DIRECTORY),
+                                "-r",
+                                "origin",
+                            ],
+                            check=True,
+                        )
+
     else:
-        # Pas de repo distant; on peut quand même créer les branches localement
-        if "{{cookiecutter.create_difficulty_branches}}" == "y":
-            if GIT_EXE is None:
-                print("git executable not found in PATH, skipping local branch creation.")
-            else:
-                if not is_inside_git_repo():
-                    try:
-                        run([GIT_EXE, "-C", str(PROJECT_DIRECTORY), "init", "-b", "main"], check=True)
-                    except subprocess.CalledProcessError:
-                        run([GIT_EXE, "-C", str(PROJECT_DIRECTORY), "init"], check=True)
-                        try:
-                            run([GIT_EXE, "-C", str(PROJECT_DIRECTORY), "checkout", "-b", "main"], check=True)
-                        except subprocess.CalledProcessError:
-                            pass
-                git("add", ".", check=True)
+        # Local-only: still make minimal commits so hooks can run if enabled
+        if GIT_EXE is None:
+            print("git not found; skipping local branch creation.")
+        else:
+            if not _inside_git_repo():
                 try:
-                    git("commit", "-m", "Initial commit", check=True)
+                    _run([GIT_EXE, "-C", str(PROJECT_DIRECTORY), "init", "-b", "main"], check=True)
                 except subprocess.CalledProcessError:
-                    pass
+                    _run([GIT_EXE, "-C", str(PROJECT_DIRECTORY), "init"], check=True)
+                    with suppress(subprocess.CalledProcessError):
+                        _run([GIT_EXE, "-C", str(PROJECT_DIRECTORY), "checkout", "-b", "main"], check=True)
 
-                raw = difficulty_branches
-                branches = [b.strip() for b in raw.split(",") if b.strip()]
-                create_difficulty_branches(branches, project_name)
+            _ensure_git_identity()
 
-                # *** Réduire main à README.md uniquement ***
-                keep_only_readme_on_main()
+            _git("add", ".", check=True)
+            with suppress(subprocess.CalledProcessError):
+                _git("commit", "-m", "Initial commit", "--no-verify", check=True)
+
+            branches = [b.strip() for b in _DIFFICULTY_BRANCHES_RAW.split(",") if b.strip()]
+            _create_difficulty_branches(branches, project_name)
+
+    # Final clean-up of the main branch
+    try:
+        _git("switch", "main", check=True)
+    except subprocess.CalledProcessError:
+        print("Impossible de basculer sur 'main', nettoyage ignoré.")
+    else:
+        readme_path = PROJECT_DIRECTORY / "README.md"
+        if not readme_path.exists():
+            readme_path.write_text(f"# {project_name}\n", encoding="utf-8")
+
+        deleted = False
+        for entry in PROJECT_DIRECTORY.iterdir():
+            name = entry.name
+            if name in ("README.md", ".git"):
+                continue
+            try:
+                if entry.is_dir():
+                    shutil.rmtree(entry, ignore_errors=True)
+                else:
+                    entry.unlink(missing_ok=True)
+                deleted = True
+            except Exception:
+                with suppress(FileNotFoundError):
+                    if entry.is_dir():
+                        shutil.rmtree(entry, ignore_errors=True)
+                    else:
+                        entry.unlink()
+                deleted = True
+
+        if deleted:
+            _safe_commit("main: clean workspace, keep README only")
+            print()
+        else:
+            print("Aucun fichier à supprimer sur main.")
+
+    # Ensure requirements.txt is staged & committed if generated
+    req = PROJECT_DIRECTORY / "requirements.txt"
+    if req.exists():
+        _git("add", "requirements.txt", check=True)
+        res = _git("status", "--porcelain", check=False, capture_output=True, text=True)
+        if "requirements.txt" in res.stdout:
+            with suppress(subprocess.CalledProcessError):
+                _git("commit", "-m", "chore: add generated requirements.txt", "--no-verify", check=True)
+
+    # Final push
+    if _has_remote_origin():
+        try:
+            # Push all local branches and set upstreams
+            _git("push", "-u", "origin", "--all", check=True)
+            # Push tags if any
+            with suppress(subprocess.CalledProcessError):
+                _git("push", "-u", "origin", "--tags", check=True)
+        except subprocess.CalledProcessError:
+            print("Final push failed. Check your permissions/authentication and try again.")
+    else:
+        print("No 'origin' remote configured; skipping final push.")

@@ -1,4 +1,4 @@
-# Cookiecutter uv
+# Template for datacraft's workshops
 
 ## Quickstart
 
@@ -23,6 +23,10 @@ Follow the prompts to configure your project. Once completed, a new directory co
 If you want to customize default values for this project:
 1. Clone or fork this project
 2. Edit [`cookiecutter.json`](./cookiecutter.json) and insert your default values
+3. You can then choose what the default values generate by manipulating the [`post_gen_hooks.py`](./hooks/post_gen_project.py) file.
+
+In addition, you can extend step 3 to fully adapt the generation logic to your needs (e.g., adding or removing files, renaming paths, injecting extra configuration).
+All the files and templates located in `{{cookiecutter.project_name}}` correspond to the default generated structure. You are free to modify them to define the base templates for your own project.
 
 ## Acknowledgements
 
