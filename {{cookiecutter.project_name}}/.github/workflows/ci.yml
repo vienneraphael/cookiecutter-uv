@@ -11,11 +11,11 @@ on:
 
 jobs:
   pre-commit:
-    name: Pre-commit Checks
+    name: Prek Checks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v5
@@ -30,8 +30,10 @@ jobs:
         env:
           UV_PROJECT_ENVIRONMENT: .venv
 
-      - name: Run pre-commit
-        uses: pre-commit/action@v3.0.1
+      - name: Run prek
+        uses: j178/prek-action@v1
+        with:
+          extra-args: ruff-check ruff-format ty-check
 
   run-tests:
     name: Run Python Tests
@@ -39,7 +41,7 @@ jobs:
     needs: pre-commit
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v5
@@ -54,5 +56,5 @@ jobs:
         env:
           UV_PROJECT_ENVIRONMENT: .venv
 
-      - name: Run pytest
+      - name: Run pytest with coverage
         run: uv run coverage run -m pytest
